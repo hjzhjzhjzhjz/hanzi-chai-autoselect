@@ -9,15 +9,15 @@ name: 拆字检查
 on:
   workflow_dispatch:
     inputs:
-      方案:
+      scheme:
         description: "方案名（examples/ 下的文件名，不带 .yaml）"
         required: true
         default: "easy"
-      字:
-        description: "要拆的字，逗号分隔（留空则列出方案全部字根）"
+      chars:
+        description: "要拆的字，逗号分隔（留空则列出方案全部字）"
         required: false
         default: "㡀,敝,弊,蔽,憋,毙,瞥,撇"
-      上传结果:
+      upload_result:
         description: "是否把 JSON 结果作为 artifact 上传"
         type: boolean
         default: true
@@ -35,7 +35,7 @@ concurrency:
 
 jobs:
   拆字:
-    name: 拆分 ${{ inputs.方案 || 'easy' }}
+    name: 拆分 ${{ inputs.scheme || 'easy' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -51,31 +51,31 @@ jobs:
       - name: 安装依赖
         run: bun install --frozen-lockfile
 
-      - name: 下载字库数据（fetch）
+      - name: 下载字库数据
         run: bun run fetch
 
       - name: 运行拆分
-        id: 拆字
+        id: run_split
         run: |
-          方案="${{ inputs.方案 || 'easy' }}"
-          字="${{ inputs.字 }}"
-          echo "方案: $方案"
-          echo "字: $字"
-          # 写入 workflow 输出，便于后续步骤引用
+          set -euo pipefail
+          SCHEME="${{ inputs.scheme || 'easy' }}"
+          CHARS="${{ inputs.chars }}"
+          echo "方案: $SCHEME"
+          echo "目标字: $CHARS"
+          # 逗号分隔的字符列表转成空格分隔的参数
+          ARGS=""
+          if [ -n "$CHARS" ]; then
+            ARGS=$(echo "$CHARS" | tr ',' ' ')
+          fi
+          bun run 拆字 "$SCHEME" $ARGS
           {
-            echo "方案<<EOF"
-            echo "$方案"
-            echo "EOF"
-            echo "字<<EOF"
-            echo "$字"
+            echo "scheme<<EOF"
+            echo "$SCHEME"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
-          bun run 拆字 "$方案" ${字//,/ }
-        env:
-          字列表: ${{ inputs.字 }}
 
       - name: 保存结果
-        if: ${{ inputs.上传结果 != false }}
+        if: ${{ inputs.upload_result != false }}
         uses: actions/upload-artifact@v4
         with:
           name: 拆字结果-${{ github.run_number }}
