@@ -34,7 +34,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  拆字:
+  split:
     name: 拆分 ${{ inputs.scheme || 'easy' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
