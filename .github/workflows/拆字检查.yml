@@ -1,0 +1,86 @@
+name: 拆字检查
+
+# 在 GitHub Actions 云端跑 hanzi-chai 的拆分算法。
+# 目的：验证指定汉字在某个方案下能否被拆出来、拆成哪些部件、得到什么编码。
+#
+# 手动触发：在 Actions 页点 "拆字检查" → Run workflow → 填参数
+# 也支持 push 到 main 时自动跑一次默认检查。
+
+on:
+  workflow_dispatch:
+    inputs:
+      方案:
+        description: "方案名（examples/ 下的文件名，不带 .yaml）"
+        required: true
+        default: "easy"
+      字:
+        description: "要拆的字，逗号分隔（留空则列出方案全部字根）"
+        required: false
+        default: "㡀,敝,弊,蔽,憋,毙,瞥,撇"
+      上传结果:
+        description: "是否把 JSON 结果作为 artifact 上传"
+        type: boolean
+        default: true
+  push:
+    branches: [main]
+    paths:
+      - "packages/hanzi-chai/**"
+      - "examples/**"
+      - "拆字.ts"
+      - ".github/workflows/拆字检查.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  拆字:
+    name: 拆分 ${{ inputs.方案 || 'easy' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: 安装依赖
+        run: bun install --frozen-lockfile
+
+      - name: 下载字库数据（fetch）
+        run: bun run fetch
+
+      - name: 运行拆分
+        id: 拆字
+        run: |
+          方案="${{ inputs.方案 || 'easy' }}"
+          字="${{ inputs.字 }}"
+          echo "方案: $方案"
+          echo "字: $字"
+          # 写入 workflow 输出，便于后续步骤引用
+          {
+            echo "方案<<EOF"
+            echo "$方案"
+            echo "EOF"
+            echo "字<<EOF"
+            echo "$字"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          bun run 拆字 "$方案" ${字//,/ }
+        env:
+          字列表: ${{ inputs.字 }}
+
+      - name: 保存结果
+        if: ${{ inputs.上传结果 != false }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: 拆字结果-${{ github.run_number }}
+          path: |
+            拆字结果.json
+            output-*/
+          retention-days: 30
+          if-no-files-found: warn
